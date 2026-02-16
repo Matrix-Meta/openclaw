@@ -73,17 +73,11 @@ function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: bool
   return ["## User Identity", ownerLine, ""];
 }
 
-function buildTimeSection(params: { userTimezone?: string; userTime?: string }) {
+function buildTimeSection(params: { userTimezone?: string }) {
   if (!params.userTimezone) {
     return [];
   }
-  const timeInfo = params.userTime ? `Time: ${params.userTime}` : "";
-  const parts = [`## Current Date & Time`, `Time zone: ${params.userTimezone}`];
-  if (timeInfo) {
-    parts.push(timeInfo);
-  }
-  parts.push("");
-  return parts;
+  return ["## Current Date & Time", `Time zone: ${params.userTimezone}`, ""];
 }
 
 function buildReplyTagsSection(isMinimal: boolean) {
@@ -532,7 +526,6 @@ export function buildAgentSystemPrompt(params: {
     ...buildUserIdentitySection(ownerLine, isMinimal),
     ...buildTimeSection({
       userTimezone,
-      userTime: params.userTime,
     }),
     "## Workspace Files (injected)",
     "These user-editable files are loaded by OpenClaw and included below in Project Context.",
