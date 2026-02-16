@@ -315,7 +315,9 @@ export async function runGmailService(opts: GmailRunOptions) {
 
   const renewMs = runtimeConfig.renewEveryMinutes * 60_000;
   const renewTimer = setInterval(() => {
-    void startGmailWatch(runtimeConfig);
+    startGmailWatch(runtimeConfig).catch((err) => {
+      defaultRuntime.error(`Gmail watch renew failed: ${err}`);
+    });
   }, renewMs);
 
   const detachSignals = () => {

@@ -191,7 +191,9 @@ export async function startGmailWatcher(cfg: OpenClawConfig): Promise<GmailWatch
     if (shuttingDown) {
       return;
     }
-    void startGmailWatch(runtimeConfig);
+    startGmailWatch(runtimeConfig).catch((err) => {
+      log.error(`Gmail watch renew failed: ${err}`);
+    });
   }, renewMs);
 
   log.info(
