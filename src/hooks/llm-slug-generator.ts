@@ -77,8 +77,9 @@ Reply with ONLY the slug, nothing else. Examples: "vendor-pitch", "api-design", 
     if (tempSessionFile) {
       try {
         await fs.rm(path.dirname(tempSessionFile), { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
+      } catch (err) {
+        // Log but ignore cleanup errors - they don't affect the main operation
+        console.warn("[llm-slug-generator] Failed to clean up temp file:", err);
       }
     }
   }
