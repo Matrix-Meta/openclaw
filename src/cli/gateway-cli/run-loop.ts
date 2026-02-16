@@ -34,7 +34,7 @@ export async function runGatewayLoop(params: {
     process.removeListener("SIGUSR1", onSigusr1);
   };
 
-  const DRAIN_TIMEOUT_MS = 30_000;
+  const DRAIN_TIMEOUT_MS = 120_000; // 2 minutes - allow time for compaction to complete
   const SHUTDOWN_TIMEOUT_MS = 5_000;
 
   const request = (action: GatewayRunSignalAction, signal: string) => {
@@ -59,16 +59,48 @@ export async function runGatewayLoop(params: {
         // On restart, wait for in-flight agent turns to finish before
         // tearing down the server so buffered messages are delivered.
         if (isRestart) {
-          const activeTasks = getActiveTaskCount();
+          let activeTasks = getActiveTaskCount();
           if (activeTasks > 0) {
-            gatewayLog.info(
-              `draining ${activeTasks} active task(s) before restart (timeout ${DRAIN_TIMEOUT_MS}ms)`,
-            );
-            const { drained } = await waitForActiveTasks(DRAIN_TIMEOUT_MS);
-            if (drained) {
-              gatewayLog.info("all active tasks drained");
-            } else {
-              gatewayLog.warn("drain timeout reached; proceeding with restart");
+            const BASE_TIMEOUT_MS = 120_000; // 2 minutes - allow time for compaction
+            const MAX_EXTENDED_MS = 300_000; // 5 minutes max for long compactions
+            let totalWaitedMs = 0;
+            let lastTaskCount = activeTasks;
+            let stuckCount = 0;
+
+            while (activeTasks > 0 && totalWaitedMs < MAX_EXTENDED_MS) {
+              const timeoutForThisRound = Math.min(
+                BASE_TIMEOUT_MS,
+                MAX_EXTENDED_MS - totalWaitedMs,
+              );
+              gatewayLog.info(
+                `draining ${activeTasks} active task(s) before restart (timeout ${timeoutForThisRound}ms)`,
+              );
+              const { drained } = await waitForActiveTasks(timeoutForThisRound);
+              totalWaitedMs += timeoutForThisRound;
+
+              const newTaskCount = getActiveTaskCount();
+              if (newTaskCount < lastTaskCount) {
+                // Making progress - tasks are completing
+                stuckCount = 0;
+                gatewayLog.info(`drain progress: ${lastTaskCount} -> ${newTaskCount} tasks`);
+              } else if (newTaskCount === lastTaskCount) {
+                // No progress - might be stuck in compaction
+                stuckCount++;
+                gatewayLog.warn(`drain stalled: ${stuckCount} consecutive rounds with no progress`);
+              }
+              lastTaskCount = newTaskCount;
+              activeTasks = newTaskCount;
+
+              if (drained) {
+                gatewayLog.info("all active tasks drained");
+                break;
+              }
+            }
+
+            if (activeTasks > 0) {
+              gatewayLog.warn(
+                `drain timeout reached after ${totalWaitedMs}ms with ${activeTasks} tasks remaining; proceeding with restart`,
+              );
             }
           }
         }
