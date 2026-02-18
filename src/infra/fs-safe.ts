@@ -1,8 +1,10 @@
 import type { Stats } from "node:fs";
-import { constants as fsConstants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { OpenClawConfig } from "../config/config.js";
+import { getFsSafeNative } from "../lib/native/fs-safe-native.js";
 
 export type SafeOpenErrorCode = "invalid-path" | "not-found";
 
@@ -102,4 +104,22 @@ export async function openFileWithinRoot(params: {
     }
     throw err;
   }
+}
+
+/**
+ * Check if path is safe using native Zig module if enabled
+ * Falls back to TypeScript implementation
+ */
+export async function isPathSafeNative(
+  cfg: OpenClawConfig,
+  resolvedPath: string,
+  rootWithSep: string,
+): Promise<boolean> {
+  const native = await getFsSafeNative(cfg);
+  if (native) {
+    return native.isPathSafe(resolvedPath, rootWithSep);
+  }
+
+  // Fallback to TypeScript
+  return resolvedPath.startsWith(rootWithSep);
 }

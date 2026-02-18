@@ -1,10 +1,12 @@
+import JSZip from "jszip";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import JSZip from "jszip";
 import * as tar from "tar";
+import type { OpenClawConfig } from "../config/config.js";
+import { getArchiveNative } from "../lib/native/archive-native.js";
 import {
   resolveArchiveOutputPath,
   stripArchivePath,
@@ -393,4 +395,37 @@ export async function fileExists(filePath: string): Promise<boolean> {
 export async function readJsonFile<T>(filePath: string): Promise<T> {
   const raw = await fs.readFile(filePath, "utf-8");
   return JSON.parse(raw) as T;
+}
+
+/**
+ * Native budget tracker wrapper
+ * Uses Zig N-API module when enabled
+ */
+export async function createNativeBudget(
+  cfg: OpenClawConfig,
+  maxEntryBytes: number,
+  maxExtractedBytes: number,
+): Promise<bigint | null> {
+  const native = await getArchiveNative(cfg);
+  if (!native) {
+    return null;
+  }
+
+  return native.createBudget(maxEntryBytes, maxExtractedBytes);
+}
+
+/**
+ * Validate archive entry path using native module
+ * Uses Zig N-API module when enabled
+ */
+export async function validateEntryPathNative(
+  cfg: OpenClawConfig,
+  entryPath: string,
+): Promise<boolean | null> {
+  const native = await getArchiveNative(cfg);
+  if (!native) {
+    return null;
+  }
+
+  return native.validatePath(entryPath);
 }
