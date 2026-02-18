@@ -561,6 +561,42 @@ export const OpenClawSchema = z
       .strict()
       .optional(),
     memory: MemorySchema,
+
+    // Experimental features - enabling these uses alternative implementations
+    experimental: z
+      .object({
+        // Use Zig-compiled native modules where available
+        useZigModules: z
+          .object({
+            enabled: z.boolean().optional(),
+            modules: z
+              .object({
+                fsSafe: z.boolean().optional(), // src/infra/fs-safe.ts
+                archive: z.boolean().optional(), // src/infra/archive.ts
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
+        // Use Rust-compiled native modules where available
+        useRustModules: z
+          .object({
+            enabled: z.boolean().optional(),
+            modules: z
+              .object({
+                memory: z.boolean().optional(), // src/memory/ vector search
+                browser: z.boolean().optional(), // src/browser/ automation
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+
     skills: z
       .object({
         allowBundled: z.array(z.string()).optional(),
