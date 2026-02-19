@@ -98,3 +98,14 @@ native/**/*.so
 native/**/*.a
 native/**/*.node
 native/**/build/
+
+# Native modules
+native/*.so
+native/*.a
+native/*.node
+native/*/*.so
+native/*/*.a
+native/*/*.node
+native/*/build/
+scripts/build-native.sh
+native/

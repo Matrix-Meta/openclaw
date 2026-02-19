@@ -14,9 +14,16 @@ let _archive: typeof import("./archive-native.js") | null = null;
  * Get the native module directory - works both in dev and production
  */
 function getNativeDir(): string {
-  // In development: <repo>/native/
-  // In production: <repo>/native/
-  return path.resolve(cwd(), "native");
+  // Look in dist/native/ first (production), then native/ (dev)
+  const distNative = path.resolve(cwd(), "dist/native");
+  const devNative = path.resolve(cwd(), "native");
+
+  // Check if dist/native exists (synchronous check)
+  const fs = require("node:fs");
+  if (fs.existsSync(distNative)) {
+    return distNative;
+  }
+  return devNative;
 }
 
 /**
