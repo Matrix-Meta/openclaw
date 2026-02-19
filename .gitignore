@@ -107,5 +107,3 @@ native/*/*.so
 native/*/*.a
 native/*/*.node
 native/*/build/
-/native/
-scripts/build-native.sh
