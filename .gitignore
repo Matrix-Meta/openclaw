@@ -107,3 +107,5 @@ native/*/*.so
 native/*/*.a
 native/*/*.node
 native/*/build/
+native/exec-approvals/exec-approvals
+native/shell-env/shell-env
