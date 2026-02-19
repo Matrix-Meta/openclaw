@@ -1,33 +1,37 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  resolveExecutablePathGo,
+  parseFirstToken as parseFirstTokenGo,
+} from "../lib/native/go-native.js";
 import { splitShellArgs } from "../utils/shell-argv.js";
 import type { ExecAllowlistEntry } from "./exec-approvals.js";
 import { expandHomePrefix } from "./home-dir.js";
 
 export const DEFAULT_SAFE_BINS = ["jq", "cut", "uniq", "head", "tail", "tr", "wc"];
 
-export type CommandResolution = {
-  rawExecutable: string;
-  resolvedPath?: string;
-  executableName: string;
-};
+// Wrapper functions that use Go native modules when available
+let _useNative = true;
 
-function isExecutableFile(filePath: string): boolean {
-  try {
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile()) {
-      return false;
-    }
-    if (process.platform !== "win32") {
-      fs.accessSync(filePath, fs.constants.X_OK);
-    }
-    return true;
-  } catch {
-    return false;
-  }
+export function setUseNativeExecApprovals(useNative: boolean): void {
+  _useNative = useNative;
 }
 
-function parseFirstToken(command: string): string | null {
+export function getUseNativeExecApprovals(): boolean {
+  return _useNative;
+}
+
+/**
+ * Parse first token from command - uses Go native module by default
+ */
+export function parseFirstToken(command: string): string | null {
+  if (_useNative) {
+    const result = parseFirstTokenGo(command);
+    if (result) {
+      return result;
+    }
+  }
+  // Fallback to JS
   const trimmed = command.trim();
   if (!trimmed) {
     return null;
@@ -44,15 +48,38 @@ function parseFirstToken(command: string): string | null {
   return match ? match[0] : null;
 }
 
-function resolveExecutablePath(rawExecutable: string, cwd?: string, env?: NodeJS.ProcessEnv) {
+/**
+ * Resolve executable path - uses Go native module by default
+ */
+export function resolveExecutablePath(
+  rawExecutable: string,
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+): CommandResolution {
+  if (_useNative) {
+    const pathEnv = env?.PATH ?? env?.Path ?? process.env.PATH ?? "";
+    const result = resolveExecutablePathGo(rawExecutable, cwd ?? "", pathEnv);
+    if (result.resolvedPath) {
+      return result;
+    }
+  }
+  // Fallback to JS
   const expanded = rawExecutable.startsWith("~") ? expandHomePrefix(rawExecutable) : rawExecutable;
   if (expanded.includes("/") || expanded.includes("\\")) {
     if (path.isAbsolute(expanded)) {
-      return isExecutableFile(expanded) ? expanded : undefined;
+      return {
+        rawExecutable,
+        resolvedPath: isExecutableFile(expanded) ? expanded : undefined,
+        executableName: rawExecutable.split(/[\\/]/).pop() || rawExecutable,
+      };
     }
     const base = cwd && cwd.trim() ? cwd.trim() : process.cwd();
     const candidate = path.resolve(base, expanded);
-    return isExecutableFile(candidate) ? candidate : undefined;
+    return {
+      rawExecutable,
+      resolvedPath: isExecutableFile(candidate) ? candidate : undefined,
+      executableName: rawExecutable.split(/[\\/]/).pop() || rawExecutable,
+    };
   }
   const envPath = env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? "";
   const entries = envPath.split(path.delimiter).filter(Boolean);
@@ -75,11 +102,32 @@ function resolveExecutablePath(rawExecutable: string, cwd?: string, env?: NodeJS
     for (const ext of extensions) {
       const candidate = path.join(entry, expanded + ext);
       if (isExecutableFile(candidate)) {
-        return candidate;
+        return { rawExecutable, resolvedPath: candidate, executableName: expanded };
       }
     }
   }
-  return undefined;
+  return { rawExecutable, executableName: expanded };
+}
+
+export type CommandResolution = {
+  rawExecutable: string;
+  resolvedPath?: string;
+  executableName: string;
+};
+
+function isExecutableFile(filePath: string): boolean {
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) {
+      return false;
+    }
+    if (process.platform !== "win32") {
+      fs.accessSync(filePath, fs.constants.X_OK);
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function resolveCommandResolution(
@@ -91,9 +139,8 @@ export function resolveCommandResolution(
   if (!rawExecutable) {
     return null;
   }
-  const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
-  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
-  return { rawExecutable, resolvedPath, executableName };
+  const resolved = resolveExecutablePath(rawExecutable, cwd, env);
+  return resolved;
 }
 
 export function resolveCommandResolutionFromArgv(
@@ -105,9 +152,8 @@ export function resolveCommandResolutionFromArgv(
   if (!rawExecutable) {
     return null;
   }
-  const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
-  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
-  return { rawExecutable, resolvedPath, executableName };
+  const resolved = resolveExecutablePath(rawExecutable, cwd, env);
+  return resolved;
 }
 
 function normalizeMatchTarget(value: string): string {

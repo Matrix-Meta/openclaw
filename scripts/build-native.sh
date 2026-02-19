@@ -167,3 +167,5 @@ echo "Available modules:"
 [ "$BUILD_ZIG" = true ] && echo "  - compression (Zig)"
 [ "$BUILD_GO" = true ] && echo "  - shell-env (Go)"
 [ "$BUILD_GO" = true ] && echo "  - exec-approvals (Go)"
+
+exit 0
