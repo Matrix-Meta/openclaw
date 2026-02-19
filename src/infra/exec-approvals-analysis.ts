@@ -1,113 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  resolveExecutablePathGo,
-  parseFirstToken as parseFirstTokenGo,
-} from "../lib/native/go-native.js";
 import { splitShellArgs } from "../utils/shell-argv.js";
 import type { ExecAllowlistEntry } from "./exec-approvals.js";
 import { expandHomePrefix } from "./home-dir.js";
 
 export const DEFAULT_SAFE_BINS = ["jq", "cut", "uniq", "head", "tail", "tr", "wc"];
-
-// Wrapper functions that use Go native modules when available
-let _useNative = true;
-
-export function setUseNativeExecApprovals(useNative: boolean): void {
-  _useNative = useNative;
-}
-
-export function getUseNativeExecApprovals(): boolean {
-  return _useNative;
-}
-
-/**
- * Parse first token from command - uses Go native module by default
- */
-export function parseFirstToken(command: string): string | null {
-  if (_useNative) {
-    const result = parseFirstTokenGo(command);
-    if (result) {
-      return result;
-    }
-  }
-  // Fallback to JS
-  const trimmed = command.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const first = trimmed[0];
-  if (first === '"' || first === "'") {
-    const end = trimmed.indexOf(first, 1);
-    if (end > 1) {
-      return trimmed.slice(1, end);
-    }
-    return trimmed.slice(1);
-  }
-  const match = /^[^\s]+/.exec(trimmed);
-  return match ? match[0] : null;
-}
-
-/**
- * Resolve executable path - uses Go native module by default
- */
-export function resolveExecutablePath(
-  rawExecutable: string,
-  cwd?: string,
-  env?: NodeJS.ProcessEnv,
-): CommandResolution {
-  if (_useNative) {
-    const pathEnv = env?.PATH ?? env?.Path ?? process.env.PATH ?? "";
-    const result = resolveExecutablePathGo(rawExecutable, cwd ?? "", pathEnv);
-    if (result.resolvedPath) {
-      return result;
-    }
-  }
-  // Fallback to JS
-  const expanded = rawExecutable.startsWith("~") ? expandHomePrefix(rawExecutable) : rawExecutable;
-  if (expanded.includes("/") || expanded.includes("\\")) {
-    if (path.isAbsolute(expanded)) {
-      return {
-        rawExecutable,
-        resolvedPath: isExecutableFile(expanded) ? expanded : undefined,
-        executableName: rawExecutable.split(/[\\/]/).pop() || rawExecutable,
-      };
-    }
-    const base = cwd && cwd.trim() ? cwd.trim() : process.cwd();
-    const candidate = path.resolve(base, expanded);
-    return {
-      rawExecutable,
-      resolvedPath: isExecutableFile(candidate) ? candidate : undefined,
-      executableName: rawExecutable.split(/[\\/]/).pop() || rawExecutable,
-    };
-  }
-  const envPath = env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? "";
-  const entries = envPath.split(path.delimiter).filter(Boolean);
-  const hasExtension = process.platform === "win32" && path.extname(expanded).length > 0;
-  const extensions =
-    process.platform === "win32"
-      ? hasExtension
-        ? [""]
-        : (
-            env?.PATHEXT ??
-            env?.Pathext ??
-            process.env.PATHEXT ??
-            process.env.Pathext ??
-            ".EXE;.CMD;.BAT;.COM"
-          )
-            .split(";")
-            .map((ext) => ext.toLowerCase())
-      : [""];
-  for (const entry of entries) {
-    for (const ext of extensions) {
-      const candidate = path.join(entry, expanded + ext);
-      if (isExecutableFile(candidate)) {
-        return { rawExecutable, resolvedPath: candidate, executableName: expanded };
-      }
-    }
-  }
-  return { rawExecutable, executableName: expanded };
-}
 
 export type CommandResolution = {
   rawExecutable: string;
@@ -130,6 +27,61 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
+function parseFirstToken(command: string): string | null {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const first = trimmed[0];
+  if (first === '"' || first === "'") {
+    const end = trimmed.indexOf(first, 1);
+    if (end > 1) {
+      return trimmed.slice(1, end);
+    }
+    return trimmed.slice(1);
+  }
+  const match = /^[^\s]+/.exec(trimmed);
+  return match ? match[0] : null;
+}
+
+function resolveExecutablePath(rawExecutable: string, cwd?: string, env?: NodeJS.ProcessEnv) {
+  const expanded = rawExecutable.startsWith("~") ? expandHomePrefix(rawExecutable) : rawExecutable;
+  if (expanded.includes("/") || expanded.includes("\\")) {
+    if (path.isAbsolute(expanded)) {
+      return isExecutableFile(expanded) ? expanded : undefined;
+    }
+    const base = cwd && cwd.trim() ? cwd.trim() : process.cwd();
+    const candidate = path.resolve(base, expanded);
+    return isExecutableFile(candidate) ? candidate : undefined;
+  }
+  const envPath = env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? "";
+  const entries = envPath.split(path.delimiter).filter(Boolean);
+  const hasExtension = process.platform === "win32" && path.extname(expanded).length > 0;
+  const extensions =
+    process.platform === "win32"
+      ? hasExtension
+        ? [""]
+        : (
+            env?.PATHEXT ??
+            env?.Pathext ??
+            process.env.PATHEXT ??
+            process.env.Pathext ??
+            ".EXE;.CMD;.BAT;.COM"
+          )
+            .split(";")
+            .map((ext) => ext.toLowerCase())
+      : [""];
+  for (const entry of entries) {
+    for (const ext of extensions) {
+      const candidate = path.join(entry, expanded + ext);
+      if (isExecutableFile(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function resolveCommandResolution(
   command: string,
   cwd?: string,
@@ -139,8 +91,9 @@ export function resolveCommandResolution(
   if (!rawExecutable) {
     return null;
   }
-  const resolved = resolveExecutablePath(rawExecutable, cwd, env);
-  return resolved;
+  const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
+  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
+  return { rawExecutable, resolvedPath, executableName };
 }
 
 export function resolveCommandResolutionFromArgv(
@@ -152,8 +105,9 @@ export function resolveCommandResolutionFromArgv(
   if (!rawExecutable) {
     return null;
   }
-  const resolved = resolveExecutablePath(rawExecutable, cwd, env);
-  return resolved;
+  const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
+  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
+  return { rawExecutable, resolvedPath, executableName };
 }
 
 function normalizeMatchTarget(value: string): string {

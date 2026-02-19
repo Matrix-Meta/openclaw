@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { getShellPathFromLoginShell as getShellPathFromLoginShellGo } from "../lib/native/go-native.js";
 import { isTruthyEnvValue } from "./env.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -142,20 +141,7 @@ export function getShellPathFromLoginShell(opts: {
   timeoutMs?: number;
   exec?: typeof execFileSync;
   platform?: NodeJS.Platform;
-  useNative?: boolean;
 }): string | null {
-  const timeoutMs = resolveTimeoutMs(opts.timeoutMs);
-  const shell = opts.env.SHELL?.trim() || "/bin/sh";
-
-  // Try Go native module if enabled
-  if (opts.useNative !== false) {
-    const goResult = getShellPathFromLoginShellGo(shell, timeoutMs);
-    if (goResult) {
-      cachedShellPath = goResult;
-      return cachedShellPath;
-    }
-  }
-
   if (cachedShellPath !== undefined) {
     return cachedShellPath;
   }
@@ -166,11 +152,12 @@ export function getShellPathFromLoginShell(opts: {
   }
 
   const exec = opts.exec ?? execFileSync;
-  const shellPath = resolveShell(opts.env);
+  const timeoutMs = resolveTimeoutMs(opts.timeoutMs);
+  const shell = resolveShell(opts.env);
 
   let stdout: Buffer;
   try {
-    stdout = execLoginShellEnvZero({ shell: shellPath, env: opts.env, exec, timeoutMs });
+    stdout = execLoginShellEnvZero({ shell, env: opts.env, exec, timeoutMs });
   } catch {
     cachedShellPath = null;
     return cachedShellPath;
