@@ -594,6 +594,20 @@ export const OpenClawSchema = z
           })
           .strict()
           .optional(),
+        // Use Go-compiled native modules where available
+        useGoModules: z
+          .object({
+            enabled: z.boolean().optional(),
+            modules: z
+              .object({
+                shellEnv: z.boolean().optional(), // src/infra/shell-env.ts
+                execApprovals: z.boolean().optional(), // src/infra/exec-approvals.ts
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
