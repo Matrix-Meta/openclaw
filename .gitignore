@@ -92,3 +92,9 @@ package-lock.json
 
 # Local iOS signing overrides
 apps/ios/LocalSigning.xcconfig
+
+# Native module build artifacts
+native/**/*.so
+native/**/*.a
+native/**/*.node
+native/**/build/
