@@ -573,6 +573,7 @@ export const OpenClawSchema = z
               .object({
                 fsSafe: z.boolean().optional(), // src/infra/fs-safe.ts
                 archive: z.boolean().optional(), // src/infra/archive.ts
+                compression: z.boolean().optional(), // src/infra/archive.ts (extract)
               })
               .strict()
               .optional(),

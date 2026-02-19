@@ -36,14 +36,31 @@ g++ -shared -fPIC -O2 \
     -L./src -larchive \
     -Wl,-rpath,'$ORIGIN'
 
+# Build compression
+echo "Building compression..."
+cd "$REPO_ROOT/native/compression/src"
+zig build-lib -O ReleaseFast -fPIC -dynamic -lc compression.zig -larchive -lzip
+cd "$REPO_ROOT/native/compression"
+g++ -shared -fPIC -O2 \
+    -I/usr/include/node \
+    -std=c++20 \
+    -DNAPI_DISABLE_CPP_EXCEPTIONS \
+    napi_wrapper.cc \
+    -o compression.node \
+    -L./src -lcompression -larchive -lzip \
+    -Wl,-rpath,'$ORIGIN'
+
 # Copy to dist/
 echo "Copying to dist/..."
 mkdir -p "$REPO_ROOT/dist/native/fs-safe"
 mkdir -p "$REPO_ROOT/dist/native/archive"
+mkdir -p "$REPO_ROOT/dist/native/compression"
 
 cp "$REPO_ROOT/native/fs-safe/fs_safe.node" "$REPO_ROOT/dist/native/fs-safe/"
 cp "$REPO_ROOT/native/fs-safe/src/libfs_safe.so" "$REPO_ROOT/dist/native/fs-safe/"
 cp "$REPO_ROOT/native/archive/archive.node" "$REPO_ROOT/dist/native/archive/"
 cp "$REPO_ROOT/native/archive/src/libarchive.so" "$REPO_ROOT/dist/native/archive/"
+cp "$REPO_ROOT/native/compression/compression.node" "$REPO_ROOT/dist/native/compression/"
+cp "$REPO_ROOT/native/compression/src/libcompression.so" "$REPO_ROOT/dist/native/compression/"
 
 echo "✅ Done! Native modules in dist/native/"

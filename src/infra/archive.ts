@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import * as tar from "tar";
 import type { OpenClawConfig } from "../config/config.js";
 import { getArchiveNative } from "../lib/native/archive-native.js";
+import { extractArchiveNative, isCompressionNativeEnabled } from "../lib/native/compression-native.js";
 import {
   resolveArchiveOutputPath,
   stripArchivePath,
@@ -309,6 +310,19 @@ export async function extractArchive(params: {
   const kind = params.kind ?? resolveArchiveKind(params.archivePath);
   if (!kind) {
     throw new Error(`unsupported archive: ${params.archivePath}`);
+  }
+
+  // Use native compression if enabled (supports both zip and tar)
+  if (isCompressionNativeEnabled()) {
+    try {
+      const result = await extractArchiveNative(params.archivePath, params.destDir);
+      if (result === 0) {
+        return; // Success
+      }
+      // Fall back to JS implementation on error
+    } catch {
+      // Fall back to JS implementation
+    }
   }
 
   const label = kind === "zip" ? "extract zip" : "extract tar";
