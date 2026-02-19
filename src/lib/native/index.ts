@@ -4,13 +4,20 @@
  */
 
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { cwd } from "node:process";
 
 // Cache for loaded native modules
 let _fsSafe: typeof import("./fs-safe-native.js") | null = null;
 let _archive: typeof import("./archive-native.js") | null = null;
+
+/**
+ * Get the native module directory - works both in dev and production
+ */
+function getNativeDir(): string {
+  // In development: <repo>/native/
+  // In production: <repo>/native/
+  return path.resolve(cwd(), "native");
+}
 
 /**
  * Load fs-safe native module
@@ -22,8 +29,8 @@ export async function loadFsSafeNative() {
   }
 
   try {
-    // Try to load from relative path to native modules
-    const nativePath = path.resolve(__dirname, "../../native/fs-safe/fs_safe.node");
+    const nativeDir = getNativeDir();
+    const nativePath = path.join(nativeDir, "fs-safe/fs_safe.node");
     const mod = await import(nativePath);
     _fsSafe = mod;
     return mod;
@@ -43,7 +50,8 @@ export async function loadArchiveNative() {
   }
 
   try {
-    const nativePath = path.resolve(__dirname, "../../native/archive/archive.node");
+    const nativeDir = getNativeDir();
+    const nativePath = path.join(nativeDir, "archive/archive.node");
     const mod = await import(nativePath);
     _archive = mod;
     return mod;
@@ -54,18 +62,11 @@ export async function loadArchiveNative() {
 
 /**
  * Check if native modules should be used based on config
+ * Uses type assertion for compatibility with different config types
  */
-export interface NativeConfig {
-  experimental?: {
-    useZigModules?: {
-      enabled?: boolean;
-      modules?: {
-        fsSafe?: boolean;
-        archive?: boolean;
-      };
-    };
-  };
-}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type NativeConfig = any;
 
 export function isNativeEnabled(cfg: NativeConfig, module: "fsSafe" | "archive"): boolean {
   const exp = cfg.experimental?.useZigModules;
